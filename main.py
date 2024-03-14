@@ -48,13 +48,21 @@ def main_win():
         if tuning_kits.count(kit) > 1:
             duplicates.append(kit)
     if len(duplicates) > 0:
+        printed_kits = []
+        printed_files = []
         print("!!! Duplicates found:")
         for kit in duplicates:
+            if kit in printed_kits:
+                continue
+            printed_kits.append(kit)
             print(f"Duplicated ID: {kit}")
             for file in carcols_files:
                 with open(file, "r") as f:
                     for line in f:
                         if f'<id value="{kit}"' in line:
+                            if file in printed_files:
+                                continue
+                            printed_files.append(file)
                             print(f"Location: {file}")
     else:
         print("No duplicates found! :) Exiting...")
@@ -91,13 +99,21 @@ def main_linux():
         if tuning_kits.count(kit) > 1:
             duplicates.append(kit)
     if len(duplicates) > 0:
+        printed_kits = []
+        printed_files = []
         print("!!! Duplicates found:")
         for kit in duplicates:
+            if kit in printed_kits:
+                continue
+            printed_kits.append(kit)
             print(f"Duplicated ID: {kit}")
             for file in carcols_files:
                 with open(file, "r") as f:
                     for line in f:
                         if f'<id value="{kit}"' in line:
+                            if file in printed_files:
+                                continue
+                            printed_files.append(file)
                             print(f"Location: {file}")
     else:
         print("No duplicates found! :) Exiting...")
