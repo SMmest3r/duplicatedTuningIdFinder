@@ -5,118 +5,74 @@ import tkinter
 from tkinter import filedialog
 import os
 
-def main():
-    print("Welcome to the tuning kit ID checker from https://mest3rdevelopment.com/ !\n\n")
+def select_directory():
+    """Selects a directory based on the operating system."""
     if platform.system() == "Windows":
-        main_win()
-    elif platform.system() == "Linux":
-        main_linux()
+        root = tkinter.Tk()
+        root.withdraw()
+        folder_selected = filedialog.askdirectory()
     else:
-        print("Please use Windows or Linux")
-        time.sleep(5)
-        sys.exit()
+        folder_selected = input("Folder: ")
+    return folder_selected
 
-def main_win():
-    print("Select the folder where all the vehicles are located")
-    root = tkinter.Tk()
-    root.withdraw()
-    folder_selected = filedialog.askdirectory()
-    if folder_selected == "":
-        print("No folder selected! Exiting...")
-        time.sleep(5)
-        sys.exit()
-    print(f"Searching for vehicles in {folder_selected}...")
+def find_carcols_files(folder_selected):
+    """Finds all 'carcols.meta' files within the selected directory."""
     carcols_files = []
     for root, dirs, files in os.walk(folder_selected):
         for file in files:
             if file.endswith("carcols.meta"):
                 carcols_files.append(os.path.join(root, file))
-    print(f"Found {len(carcols_files)} carcols.meta files")
-    print("Checking tuning kit IDs...")
-    tuning_kits = []
-    for file in carcols_files:
-        with open(file, "r") as f:
-            lines = f.readlines()
-            for i in range(len(lines)):
-                if "<id value=" in lines[i]:
-                    id = lines[i].split('"')[1]
-                    tuning_kits.append(id)
-                    break
-    print(f"Found {len(tuning_kits)} tuning kit IDs")
-    duplicates = []
-    for kit in tuning_kits:
-        if tuning_kits.count(kit) > 1:
-            duplicates.append(kit)
-    if len(duplicates) > 0:
-        printed_kits = []
-        printed_files = []
-        print("!!! Duplicates found:")
-        for kit in duplicates:
-            if kit in printed_kits:
-                continue
-            printed_kits.append(kit)
-            print(f"Duplicated ID: {kit}")
-            for file in carcols_files:
-                with open(file, "r") as f:
-                    for line in f:
-                        if f'<id value="{kit}"' in line:
-                            if file in printed_files:
-                                continue
-                            printed_files.append(file)
-                            print(f"Location: {file}")
-    else:
-        print("No duplicates found! :) Exiting...")
-    time.sleep(5)
-    sys.exit()
+    return carcols_files
 
-def main_linux():
-    print("Select the folder where all the vehicles are located")
-    folder_selected = input("Folder: ")
-    if folder_selected == "":
+import json  # Import the json module
+
+def check_tuning_kit_ids(carcols_files):
+    """Checks and reports duplicate tuning kit IDs and writes a summary to a JSON file."""
+    tuning_kits = {}
+    for file in carcols_files:
+        with open(file, "r", encoding='utf-8', errors='ignore') as f:
+            for line in f:
+                if "<id value=" in line:
+                    id = line.split('"')[1]
+                    if id not in tuning_kits:
+                        tuning_kits[id] = [file]
+                    else:
+                        tuning_kits[id].append(file)
+    
+    duplicates = {id: files for id, files in tuning_kits.items() if len(files) > 1}
+    
+    if duplicates:
+        print("!!! Duplicates found:")
+        for id, files in duplicates.items():
+            print(f"Duplicated ID: {id} in {len(files)} locations.")
+    else:
+        print("No duplicates found! :)")
+
+    # Writing the summary to a JSON file
+    summary = {
+        "total_duplicate_ids": len(duplicates),
+        "duplicates": duplicates
+    }
+
+    with open("duplicates_summary.json", "w", encoding='utf-8') as jsonfile:
+        json.dump(summary, jsonfile, indent=4, ensure_ascii=False)
+
+    print("Summary of duplicates has been written to 'duplicates_summary.json'.")
+
+    
+def main():
+    print("Welcome to the tuning kit ID checker from https://mest3rdevelopment.com/ !\n")
+    folder_selected = select_directory()
+    if not folder_selected:
         print("No folder selected! Exiting...")
         time.sleep(5)
         sys.exit()
+    
     print(f"Searching for vehicles in {folder_selected}...")
-    carcols_files = []
-    for root, dirs, files in os.walk(folder_selected):
-        for file in files:
-            if file.endswith("carcols.meta"):
-                carcols_files.append(os.path.join(root, file))
-    print(f"Found {len(carcols_files)} carcols.meta files")
+    carcols_files = find_carcols_files(folder_selected)
+    print(f"Found {len(carcols_files)} 'carcols.meta' files")
     print("Checking tuning kit IDs...")
-    tuning_kits = []
-    for file in carcols_files:
-        with open(file, "r") as f:
-            lines = f.readlines()
-            for i in range(len(lines)):
-                if "<id value=" in lines[i]:
-                    id = lines[i].split('"')[1]
-                    tuning_kits.append(id)
-                    break
-    print(f"Found {len(tuning_kits)} tuning kit IDs")
-    duplicates = []
-    for kit in tuning_kits:
-        if tuning_kits.count(kit) > 1:
-            duplicates.append(kit)
-    if len(duplicates) > 0:
-        printed_kits = []
-        printed_files = []
-        print("!!! Duplicates found:")
-        for kit in duplicates:
-            if kit in printed_kits:
-                continue
-            printed_kits.append(kit)
-            print(f"Duplicated ID: {kit}")
-            for file in carcols_files:
-                with open(file, "r") as f:
-                    for line in f:
-                        if f'<id value="{kit}"' in line:
-                            if file in printed_files:
-                                continue
-                            printed_files.append(file)
-                            print(f"Location: {file}")
-    else:
-        print("No duplicates found! :) Exiting...")
+    check_tuning_kit_ids(carcols_files)
     time.sleep(5)
     sys.exit()
 
