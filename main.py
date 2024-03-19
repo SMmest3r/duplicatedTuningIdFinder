@@ -1,12 +1,11 @@
-import platform
-import time
-import sys
+import os
+import re
 import tkinter
 from tkinter import filedialog
-import os
+import platform
+import json
 
 def select_directory():
-    """Selects a directory based on the operating system."""
     if platform.system() == "Windows":
         root = tkinter.Tk()
         root.withdraw()
@@ -15,66 +14,75 @@ def select_directory():
         folder_selected = input("Folder: ")
     return folder_selected
 
-def find_carcols_files(folder_selected):
-    """Finds all 'carcols.meta' files within the selected directory."""
+def find_meta_files(folder_selected):
     carcols_files = []
+    vehicles_meta_files = {}
     for root, dirs, files in os.walk(folder_selected):
         for file in files:
             if file.endswith("carcols.meta"):
                 carcols_files.append(os.path.join(root, file))
-    return carcols_files
+            elif file.endswith("vehicles.meta"):
+                vehicles_meta_files[os.path.join(root, file)] = None
+    return carcols_files, vehicles_meta_files
 
-import json  # Import the json module
+def get_model_name(vehicles_meta_file):
+    with open(vehicles_meta_file, "r", encoding="utf-8") as file:
+        content = file.read()
+    model_names = re.findall(r'<modelName>(.*?)</modelName>', content)
+    return model_names[0] if model_names else "Unknown"
 
-def check_tuning_kit_ids(carcols_files):
-    """Checks and reports duplicate tuning kit IDs and writes a summary to a JSON file."""
-    tuning_kits = {}
-    for file in carcols_files:
-        with open(file, "r", encoding='utf-8', errors='ignore') as f:
-            for line in f:
-                if "<id value=" in line:
-                    id = line.split('"')[1]
-                    if id not in tuning_kits:
-                        tuning_kits[id] = [file]
-                    else:
-                        tuning_kits[id].append(file)
-    
-    duplicates = {id: files for id, files in tuning_kits.items() if len(files) > 1}
-    
-    if duplicates:
-        print("!!! Duplicates found:")
-        for id, files in duplicates.items():
-            print(f"Duplicated ID: {id} in {len(files)} locations.")
-    else:
-        print("No duplicates found! :)")
 
-    # Writing the summary to a JSON file
-    summary = {
-        "total_duplicate_ids": len(duplicates),
-        "duplicates": duplicates
-    }
+def rebuild_car_mod_kit_ids(carcols_files, vehicles_meta_files):
+    new_id = 2000
+    car_summary = {"count": 0, "cars": {}}
 
-    with open("duplicates_summary.json", "w", encoding='utf-8') as jsonfile:
-        json.dump(summary, jsonfile, indent=4, ensure_ascii=False)
+    for file_path in carcols_files:
+        directory = os.path.dirname(file_path)
+        vehicle_meta_file_path = next((f for f in vehicles_meta_files if f.startswith(directory)), None)
+        model_name = get_model_name(vehicle_meta_file_path) if vehicle_meta_file_path else "Unknown"
 
-    print("Summary of duplicates has been written to 'duplicates_summary.json'.")
+        with open(file_path, "r", encoding="utf-8") as file:
+            content = file.read()
 
-    
+        ids_found = set(re.findall(r'<id value="(\d+)"', content))
+        kit_names_found = set(re.findall(r'<kitName>(\d+)(_[\w]+)</kitName>', content))
+
+       
+        for id_val in ids_found:
+            content = re.sub(rf'<id value="{id_val}"', f'<id value="{new_id}"', content)
+            car_summary["cars"][new_id] = {"file_path": file_path, "model_name": model_name, "original_id": id_val, "new_id": new_id, "kitName": f"{new_id}_default_modkit"}  # Assume a default kitName structure
+            new_id += 1
+
+        
+        for _, suffix in kit_names_found:
+            if new_id not in car_summary["cars"]:  
+                car_summary["cars"][new_id] = {"file_path": file_path, "model_name": model_name, "new_id": new_id}
+            car_summary["cars"][new_id]["kitName"] = f"{new_id}{suffix}"
+            content = re.sub(rf'<kitName>\d+{suffix}</kitName>', f'<kitName>{new_id}{suffix}</kitName>', content, 1)
+            new_id += 1
+
+        with open(file_path, "w", encoding="utf-8") as file:
+            file.write(content)
+
+    car_summary["count"] = len(car_summary["cars"])
+
+    with open('car_mods_summary.json', 'w', encoding='utf-8') as json_file:
+        json.dump(car_summary, json_file, indent=4, ensure_ascii=False)
+
+
 def main():
-    print("Welcome to the tuning kit ID checker from https://mest3rdevelopment.com/ !\n")
     folder_selected = select_directory()
     if not folder_selected:
         print("No folder selected! Exiting...")
-        time.sleep(5)
-        sys.exit()
-    
-    print(f"Searching for vehicles in {folder_selected}...")
-    carcols_files = find_carcols_files(folder_selected)
-    print(f"Found {len(carcols_files)} 'carcols.meta' files")
-    print("Checking tuning kit IDs...")
-    check_tuning_kit_ids(carcols_files)
-    time.sleep(5)
-    sys.exit()
+        return
+
+    carcols_files, vehicles_meta_files = find_meta_files(folder_selected)
+    if not carcols_files:
+        print("No 'carcols.meta' files found in the selected directory.")
+        return
+
+    rebuild_car_mod_kit_ids(carcols_files, vehicles_meta_files)
+    print("All car mod kit IDs have been rebuilt starting from 2000, including model names. A summary has been saved to 'car_mods_summary.json'.")
 
 if __name__ == "__main__":
     main()
